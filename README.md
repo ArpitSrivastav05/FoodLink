@@ -1,5 +1,24 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Project Structure
+
+```bash
+src/
+├── app/                    # 17 pages (App Router)
+│   ├── page.tsx            # Landing page
+│   ├── login/              # Auth
+│   ├── register/           
+│   ├── donor/              # Donor: dashboard, listings, new, orders
+│   ├── acceptor/           # Acceptor: dashboard, discover, orders
+│   └── admin/              # Admin: dashboard, users, listings, analytics
+├── components/
+│   ├── ui/                 # Button, Card, Input, Badge, Modal
+│   └── layout/             # DashboardLayout (sidebar + header)
+├── contexts/               # AuthContext (Firebase auth + roles)
+├── lib/                    # firebase, listings, orders, gemini
+└── types/                  # TypeScript interfaces
+
+
 ## Getting Started
 
 First, run the development server:
