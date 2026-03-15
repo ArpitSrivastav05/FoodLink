@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTheme } from '@/contexts/ThemeContext';
 import {
   LayoutDashboard,
   Package,
@@ -17,6 +18,8 @@ import {
   X,
   Leaf,
   ChevronRight,
+  Sun,
+  Moon,
 } from 'lucide-react';
 
 interface NavItem {
@@ -46,9 +49,32 @@ const roleNavItems: Record<string, NavItem[]> = {
 };
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { appUser, signOut } = useAuth();
+  const { appUser, signOut, loading, user } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const pathname = usePathname();
+  const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // ── Auth Guard ─────────────────────────────────────────
+  useEffect(() => {
+    if (!loading && !user) {
+      router.replace('/login');
+    }
+  }, [loading, user, router]);
+
+  const handleSignOut = async () => {
+    await signOut();
+    router.push('/login');
+  };
+
+  // Show spinner while auth is resolving or redirecting unauthenticated user
+  if (loading || !user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="animate-spin rounded-full h-10 w-10 border-2 border-primary border-t-transparent" />
+      </div>
+    );
+  }
 
   const navItems = appUser ? roleNavItems[appUser.role] || [] : [];
   const roleLabel = appUser?.role
@@ -134,13 +160,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <p className="text-xs text-muted truncate">{appUser?.email}</p>
             </div>
           </div>
-          <button
-            onClick={signOut}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-muted hover:bg-red-50 hover:text-danger transition-colors cursor-pointer"
-          >
-            <LogOut size={16} />
-            Sign Out
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={toggleTheme}
+              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-muted hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+            >
+              {theme === 'dark' ? <Sun size={16} className="text-amber-400" /> : <Moon size={16} />}
+              <span>{theme === 'dark' ? 'Light' : 'Dark'}</span>
+            </button>
+            <button
+              onClick={handleSignOut}
+              title="Sign Out"
+              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-muted hover:bg-red-50 hover:text-danger dark:hover:bg-red-900/20 transition-colors cursor-pointer"
+            >
+              <LogOut size={16} />
+              <span>Sign Out</span>
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -150,16 +187,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <header className="lg:hidden sticky top-0 z-30 bg-surface/80 backdrop-blur-md border-b border-border px-4 py-3 flex items-center gap-3">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="p-2 rounded-lg hover:bg-gray-100 cursor-pointer"
+            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 cursor-pointer"
           >
             {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-1">
             <Leaf size={18} className="text-primary" />
             <span className="font-bold text-foreground">
               Food<span className="text-primary">Link</span>
             </span>
           </div>
+          <button
+            onClick={toggleTheme}
+            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 cursor-pointer"
+          >
+            {theme === 'dark' ? <Sun size={18} className="text-amber-400" /> : <Moon size={18} />}
+          </button>
         </header>
 
         <main className="flex-1 p-4 md:p-6 lg:p-8">{children}</main>

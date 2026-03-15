@@ -19,7 +19,10 @@ export default function DonorDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!appUser) return;
+    if (!appUser) {
+      setLoading(false);
+      return;
+    }
     const unsub = subscribeToListings((data) => {
       setListings(data);
       setLoading(false);

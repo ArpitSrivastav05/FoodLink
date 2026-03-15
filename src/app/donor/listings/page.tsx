@@ -22,7 +22,10 @@ export default function DonorListingsPage() {
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    if (!appUser) return;
+    if (!appUser) {
+      setLoading(false);
+      return;
+    }
     const unsub = subscribeToListings((data) => {
       setListings(data);
       setLoading(false);

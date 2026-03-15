@@ -17,7 +17,10 @@ export default function AcceptorDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!appUser) return;
+    if (!appUser) {
+      setLoading(false);
+      return;
+    }
     getOrdersByAcceptor(appUser.uid)
       .then(setOrders)
       .catch(console.error)

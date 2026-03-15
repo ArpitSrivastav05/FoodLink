@@ -17,7 +17,10 @@ export default function AcceptorOrdersPage() {
   const [cancelling, setCancelling] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!appUser) return;
+    if (!appUser) {
+      setLoading(false);
+      return;
+    }
     getOrdersByAcceptor(appUser.uid)
       .then(setOrders)
       .catch(console.error)

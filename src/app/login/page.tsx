@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, FormEvent } from 'react';
+import React, { useState, FormEvent, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
@@ -13,8 +13,15 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { signIn } = useAuth();
+  const { signIn, appUser, loading: authLoading } = useAuth();
   const router = useRouter();
+
+  // If already logged in, redirect to dashboard
+  useEffect(() => {
+    if (!authLoading && appUser) {
+      router.replace(`/${appUser.role}/dashboard`);
+    }
+  }, [authLoading, appUser, router]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -26,8 +33,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await signIn(email, password);
-      // Redirect based on role will happen in middleware or useEffect
-      router.push('/');
+      // appUser is set by signIn → the useEffect above will navigate
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Login failed';
       if (msg.includes('user-not-found') || msg.includes('wrong-password') || msg.includes('invalid-credential')) {
@@ -41,6 +47,15 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
+
+  // Show spinner while checking auth on page load
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 via-white to-orange-50">
+        <div className="animate-spin rounded-full h-10 w-10 border-2 border-primary border-t-transparent" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 via-white to-orange-50 p-4">

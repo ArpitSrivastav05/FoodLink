@@ -1,8 +1,10 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTheme } from '@/contexts/ThemeContext';
 import Button from '@/components/ui/Button';
 import {
   Leaf,
@@ -13,13 +15,26 @@ import {
   TrendingDown,
   Heart,
   Globe,
+  LogOut,
+  Sun,
+  Moon,
 } from 'lucide-react';
 
 export default function HomePage() {
-  const { appUser, loading } = useAuth();
+  const { appUser, loading, signOut } = useAuth();
+  const { theme, toggleTheme } = useTheme();
+  const router = useRouter();
 
-  // If logged in, redirect to dashboard
-  const dashboardHref = appUser ? `/${appUser.role}/dashboard` : '/login';
+  // If logged in, redirect to their dashboard automatically
+  useEffect(() => {
+    if (!loading && appUser) {
+      router.replace(`/${appUser.role}/dashboard`);
+    }
+  }, [loading, appUser, router]);
+
+  const handleSignOut = async () => {
+    await signOut();
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-emerald-50 via-white to-orange-50">
@@ -34,11 +49,26 @@ export default function HomePage() {
               Food<span className="text-primary">Link</span>
             </span>
           </Link>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            {/* Theme toggle */}
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {theme === 'dark'
+                ? <Sun size={18} className="text-amber-400" />
+                : <Moon size={18} className="text-slate-600" />}
+            </button>
             {loading ? null : appUser ? (
-              <Link href={dashboardHref}>
-                <Button size="sm">Go to Dashboard</Button>
-              </Link>
+              <>
+                <Link href={`/${appUser.role}/dashboard`}>
+                  <Button size="sm">Go to Dashboard</Button>
+                </Link>
+                <Button variant="ghost" size="sm" onClick={handleSignOut} icon={<LogOut size={14} />}>
+                  Sign Out
+                </Button>
+              </>
             ) : (
               <>
                 <Link href="/login">

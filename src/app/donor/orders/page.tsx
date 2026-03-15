@@ -17,7 +17,10 @@ export default function DonorOrdersPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!appUser) return;
+    if (!appUser) {
+      setLoading(false);
+      return;
+    }
     getOrdersByDonor(appUser.uid)
       .then(setOrders)
       .catch(console.error)

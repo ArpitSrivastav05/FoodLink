@@ -13,20 +13,34 @@ interface GeminiResponse {
   suggestedTags: string[];
 }
 
+// Simple in-memory rate-limit guard: at most 1 request per 5 seconds
+let lastRequestTime = 0;
+const MIN_INTERVAL_MS = 5000;
+
+function buildFallback(input: GenerateDescriptionInput): GeminiResponse {
+  return {
+    description: `Fresh ${input.title} — ${input.quantity} ${input.unit} available. ${
+      input.hygieneNotes ? `Hygiene notes: ${input.hygieneNotes}. ` : ''
+    }Order now to reduce food waste and enjoy quality surplus food at a reduced price!`,
+    suggestedTags: generateFallbackTags(input.title),
+  };
+}
+
 export async function generateFoodDescription(
   input: GenerateDescriptionInput
 ): Promise<GeminiResponse> {
   const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
 
   if (!apiKey || apiKey === 'your-gemini-api-key') {
-    // Fallback when no API key
-    return {
-      description: `Fresh ${input.title} — ${input.quantity} ${input.unit} available. ${
-        input.hygieneNotes ? `Hygiene notes: ${input.hygieneNotes}. ` : ''
-      }Order now to reduce food waste and enjoy quality surplus food at a reduced price!`,
-      suggestedTags: generateFallbackTags(input.title),
-    };
+    return buildFallback(input);
   }
+
+  // Client-side throttle to avoid hitting 429
+  const now = Date.now();
+  if (now - lastRequestTime < MIN_INTERVAL_MS) {
+    await new Promise((r) => setTimeout(r, MIN_INTERVAL_MS - (now - lastRequestTime)));
+  }
+  lastRequestTime = Date.now();
 
   try {
     const prompt = `You are a food listing description assistant for a food waste reduction platform called FoodLink. Generate a clear, compliant, and appealing food listing description.
@@ -56,14 +70,46 @@ Only output the JSON, no markdown.`;
       }),
     });
 
+    if (res.status === 429) {
+      // Rate limited — wait 10s and retry once
+      console.warn('Gemini rate limited (429). Retrying after 10s...');
+      await new Promise((r) => setTimeout(r, 10000));
+
+      const retry = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.7, maxOutputTokens: 300 },
+        }),
+      });
+
+      if (!retry.ok) {
+        // Still failing — use fallback silently
+        return buildFallback(input);
+      }
+
+      const retryData = await retry.json();
+      const retryText = retryData.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      const retryMatch = retryText.match(/\{[\s\S]*\}/);
+      if (retryMatch) {
+        const parsed = JSON.parse(retryMatch[0]);
+        return {
+          description: parsed.description || '',
+          suggestedTags: parsed.suggestedTags || [],
+        };
+      }
+      return buildFallback(input);
+    }
+
     if (!res.ok) {
-      throw new Error(`Gemini API error: ${res.status}`);
+      console.warn(`Gemini API error ${res.status} — using fallback description.`);
+      return buildFallback(input);
     }
 
     const data = await res.json();
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
-    // Parse JSON from response
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
@@ -73,13 +119,10 @@ Only output the JSON, no markdown.`;
       };
     }
 
-    throw new Error('Could not parse Gemini response');
+    return buildFallback(input);
   } catch (error) {
-    console.error('Gemini API error:', error);
-    return {
-      description: `Fresh ${input.title} — ${input.quantity} ${input.unit} available. Order now to reduce food waste!`,
-      suggestedTags: generateFallbackTags(input.title),
-    };
+    console.warn('Gemini request failed, using fallback:', error);
+    return buildFallback(input);
   }
 }
 
