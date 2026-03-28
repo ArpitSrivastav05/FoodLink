@@ -114,17 +114,36 @@ export async function getAllListings(): Promise<FoodListing[]> {
 // ── Real-time listener ──────────────────────────────────
 export function subscribeToListings(
   callback: (listings: FoodListing[]) => void,
-  filterDonorId?: string
+  filterDonorId?: string,
+  onError?: (error: Error) => void
 ): Unsubscribe {
   const constraints = filterDonorId
     ? [where('donorId', '==', filterDonorId), orderBy('createdAt', 'desc')]
     : [where('status', '==', 'active'), orderBy('createdAt', 'desc')];
 
   const q = query(collection(db, COLLECTION), ...constraints);
-  return onSnapshot(q, (snap) => {
-    const listings = snap.docs.map((d) => ({ id: d.id, ...d.data() } as FoodListing));
-    callback(listings);
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      const now = Date.now();
+      let listings = snap.docs.map((d) => ({ id: d.id, ...d.data() } as FoodListing));
+      // For acceptor view (no donorId filter), auto-expire and filter out expired listings
+      if (!filterDonorId) {
+        listings = listings.filter((listing) => {
+          if (listing.expiryDate <= now) {
+            updateDoc(doc(db, COLLECTION, listing.id), { status: 'expired' });
+            return false;
+          }
+          return true;
+        });
+      }
+      callback(listings);
+    },
+    (error) => {
+      console.error('Firestore listener error:', error);
+      if (onError) onError(error);
+    }
+  );
 }
 
 // ── Update ────────────────────────────────────────────────

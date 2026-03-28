@@ -11,7 +11,7 @@ import Modal from '@/components/ui/Modal';
 import Link from 'next/link';
 import { subscribeToListings, removeListing } from '@/lib/listings';
 import type { FoodListing } from '@/types';
-import { PlusCircle, Trash2, Clock, Package } from 'lucide-react';
+import { PlusCircle, Trash2, Clock, Package, Pencil } from 'lucide-react';
 
 export default function DonorListingsPage() {
   const { appUser } = useAuth();
@@ -112,7 +112,17 @@ export default function DonorListingsPage() {
 
               return (
                 <Card key={listing.id} className="group">
-                  <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-4">
+                    {/* Thumbnail */}
+                    {listing.imageUrl && (
+                      <div className="flex-shrink-0 w-20 h-20 rounded-xl overflow-hidden border border-border">
+                        <img
+                          src={listing.imageUrl}
+                          alt={listing.title}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-2">
                         <h3 className="font-bold text-foreground text-base">{listing.title}</h3>
@@ -143,14 +153,25 @@ export default function DonorListingsPage() {
                     </div>
                     <div className="flex flex-col gap-2">
                       {listing.status === 'active' && (
-                        <Button
-                          variant="danger"
-                          size="sm"
-                          onClick={() => setDeleteId(listing.id)}
-                          icon={<Trash2 size={14} />}
-                        >
-                          Remove
-                        </Button>
+                        <>
+                          <Link href={`/donor/listings/${listing.id}/edit`}>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              icon={<Pencil size={14} />}
+                            >
+                              Edit
+                            </Button>
+                          </Link>
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            onClick={() => setDeleteId(listing.id)}
+                            icon={<Trash2 size={14} />}
+                          >
+                            Remove
+                          </Button>
+                        </>
                       )}
                     </div>
                   </div>

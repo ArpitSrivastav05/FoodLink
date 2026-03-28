@@ -4,16 +4,15 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import Card, { CardContent, CardFooter } from '@/components/ui/Card';
-import { StatusBadge } from '@/components/ui/Badge';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Modal from '@/components/ui/Modal';
 import { Select } from '@/components/ui/Input';
-import { getActiveListings } from '@/lib/listings';
+import { subscribeToListings, getActiveListings, getAllListings } from '@/lib/listings';
 import { createOrder } from '@/lib/orders';
 import type { FoodListing } from '@/types';
-import { Search, Clock, MapPin, ShoppingCart, Filter, Utensils } from 'lucide-react';
+import { Search, Clock, MapPin, ShoppingCart, Filter, Utensils, ImageOff } from 'lucide-react';
 
 export default function DiscoverPage() {
   const { appUser } = useAuth();
@@ -32,14 +31,54 @@ export default function DiscoverPage() {
   const [ordering, setOrdering] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
 
+  // Use real-time listener with fallback to simple fetch
   useEffect(() => {
-    getActiveListings()
-      .then((data) => {
-        setListings(data);
-        setFiltered(data);
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
+    let cancelled = false;
+
+    // Try real-time listener first
+    const unsub = subscribeToListings(
+      (data) => {
+        if (!cancelled) {
+          setListings(data);
+          setLoading(false);
+        }
+      },
+      undefined,
+      // If listener fails (e.g. missing Firestore index), fallback to simple fetch
+      () => {
+        if (!cancelled) {
+          getActiveListings()
+            .then((data) => {
+              if (!cancelled) {
+                setListings(data);
+                setLoading(false);
+              }
+            })
+            .catch(() => {
+              // If composite query also fails, fetch all and filter client-side
+              getAllListings()
+                .then((data) => {
+                  if (!cancelled) {
+                    const now = Date.now();
+                    const active = data.filter(
+                      (l) => l.status === 'active' && l.expiryDate > now
+                    );
+                    setListings(active);
+                    setLoading(false);
+                  }
+                })
+                .catch(() => {
+                  if (!cancelled) setLoading(false);
+                });
+            });
+        }
+      }
+    );
+
+    return () => {
+      cancelled = true;
+      unsub();
+    };
   }, []);
 
   // Filter + sort
@@ -104,9 +143,6 @@ export default function DiscoverPage() {
         paymentMethod: orderPayment,
       });
       setOrderSuccess(true);
-      // Refresh listings
-      const updated = await getActiveListings();
-      setListings(updated);
     } catch (err: unknown) {
       setOrderError(err instanceof Error ? err.message : 'Failed to place order.');
     } finally {
@@ -207,6 +243,21 @@ export default function DiscoverPage() {
 
               return (
                 <Card key={listing.id} hover onClick={() => setSelectedListing(listing)} className="flex flex-col">
+                  {/* Listing Image */}
+                  {listing.imageUrl ? (
+                    <div className="w-full h-40 -mt-5 -mx-5 mb-4 rounded-t-2xl overflow-hidden" style={{ width: 'calc(100% + 2.5rem)' }}>
+                      <img
+                        src={listing.imageUrl}
+                        alt={listing.title}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-full h-28 -mt-5 -mx-5 mb-4 rounded-t-2xl overflow-hidden bg-gradient-to-br from-primary/10 to-secondary/10 flex items-center justify-center" style={{ width: 'calc(100% + 2.5rem)' }}>
+                      <ImageOff size={32} className="text-muted/40" />
+                    </div>
+                  )}
+
                   <CardContent className="flex-1">
                     {/* Urgency banner */}
                     {isUrgent && (
@@ -275,6 +326,17 @@ export default function DiscoverPage() {
             {orderError && (
               <div className="bg-red-50 text-red-700 text-sm px-4 py-3 rounded-xl border border-red-200">
                 {orderError}
+              </div>
+            )}
+
+            {/* Listing image in modal */}
+            {selectedListing.imageUrl && (
+              <div className="rounded-xl overflow-hidden border border-border">
+                <img
+                  src={selectedListing.imageUrl}
+                  alt={selectedListing.title}
+                  className="w-full h-48 object-cover"
+                />
               </div>
             )}
 

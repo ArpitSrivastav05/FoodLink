@@ -1,16 +1,18 @@
 'use client';
 
-import React, { useState, FormEvent, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useEffect, useState, useRef, FormEvent } from 'react';
+import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import Card, { CardContent } from '@/components/ui/Card';
 import Input, { Textarea, Select } from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
-import { createListing } from '@/lib/listings';
+import { getListing, updateListing } from '@/lib/listings';
 import { generateFoodDescription } from '@/lib/gemini';
-import { Sparkles, X, Save, ImagePlus, Trash2 } from 'lucide-react';
+import type { FoodListing } from '@/types';
+import { Sparkles, X, Save, ImagePlus, Trash2, ArrowLeft } from 'lucide-react';
+import Link from 'next/link';
 
 const UNITS = [
   { value: 'kg', label: 'Kilograms (kg)' },
@@ -52,10 +54,14 @@ function compressImage(file: File, maxSize = 800): Promise<string> {
   });
 }
 
-export default function NewListingPage() {
+export default function EditListingPage() {
   const { appUser } = useAuth();
   const router = useRouter();
+  const params = useParams();
+  const listingId = params.id as string;
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [original, setOriginal] = useState<FoodListing | null>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [quantity, setQuantity] = useState('');
@@ -69,8 +75,46 @@ export default function NewListingPage() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [fetching, setFetching] = useState(true);
   const [aiLoading, setAiLoading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+
+  useEffect(() => {
+    if (!listingId) return;
+    getListing(listingId)
+      .then((data) => {
+        if (!data) {
+          setError('Listing not found.');
+          setFetching(false);
+          return;
+        }
+        if (appUser && data.donorId !== appUser.uid) {
+          setError('You do not have permission to edit this listing.');
+          setFetching(false);
+          return;
+        }
+        setOriginal(data);
+        setTitle(data.title);
+        setDescription(data.description);
+        setQuantity(data.quantity.toString());
+        setUnit(data.unit);
+        setPricePerUnit(data.pricePerUnit.toString());
+        // Convert timestamp to datetime-local format
+        const dt = new Date(data.expiryDate);
+        const pad = (n: number) => n.toString().padStart(2, '0');
+        setExpiryDate(`${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`);
+        setHygieneNotes(data.hygieneNotes || '');
+        setLocation(data.location || '');
+        setTags(data.tags || []);
+        setImagePreview(data.imageUrl || null);
+        setFetching(false);
+      })
+      .catch((err) => {
+        console.error(err);
+        setError('Failed to load listing.');
+        setFetching(false);
+      });
+  }, [listingId, appUser]);
 
   const addTag = () => {
     const t = tagInput.trim().toLowerCase();
@@ -125,7 +169,6 @@ export default function NewListingPage() {
         tags,
       });
       setDescription(result.description);
-      // Merge suggested tags
       const newTags = [...new Set([...tags, ...result.suggestedTags])];
       setTags(newTags.slice(0, 8));
     } catch {
@@ -139,7 +182,7 @@ export default function NewListingPage() {
     e.preventDefault();
     setError('');
 
-    if (!appUser) {
+    if (!appUser || !original) {
       setError('You must be logged in.');
       return;
     }
@@ -163,9 +206,7 @@ export default function NewListingPage() {
 
     setLoading(true);
     try {
-      await createListing({
-        donorId: appUser.uid,
-        donorName: appUser.name,
+      await updateListing(listingId, {
         title: title.trim(),
         description: description.trim(),
         tags,
@@ -175,24 +216,55 @@ export default function NewListingPage() {
         expiryDate: expiry,
         hygieneNotes: hygieneNotes.trim(),
         location: location.trim(),
-        ...(imagePreview ? { imageUrl: imagePreview } : {}),
+        imageUrl: imagePreview || undefined,
       });
       router.push('/donor/listings');
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to create listing.');
+      setError(err instanceof Error ? err.message : 'Failed to update listing.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Minimum date for expiry (now + 1 hour)
   const minExpiry = new Date(Date.now() + 3600000).toISOString().slice(0, 16);
+
+  if (fetching) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary border-t-transparent" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!original) {
+    return (
+      <DashboardLayout>
+        <div className="max-w-2xl mx-auto text-center py-16">
+          <p className="text-muted font-medium mb-4">{error || 'Listing not found.'}</p>
+          <Link href="/donor/listings">
+            <Button variant="outline" icon={<ArrowLeft size={16} />}>Back to Listings</Button>
+          </Link>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
       <div className="max-w-2xl mx-auto animate-fade-in">
-        <h1 className="text-2xl font-extrabold mb-1">Create New Listing</h1>
-        <p className="text-sm text-muted mb-6">Post surplus food for acceptors to discover</p>
+        <div className="flex items-center gap-3 mb-6">
+          <Link href="/donor/listings">
+            <button className="p-2 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer">
+              <ArrowLeft size={20} />
+            </button>
+          </Link>
+          <div>
+            <h1 className="text-2xl font-extrabold">Edit Listing</h1>
+            <p className="text-sm text-muted mt-0.5">Update your food listing details</p>
+          </div>
+        </div>
 
         <Card>
           <CardContent>
@@ -378,7 +450,7 @@ export default function NewListingPage() {
               </div>
 
               <Button type="submit" loading={loading} className="w-full" size="lg" icon={<Save size={16} />}>
-                Publish Listing
+                Save Changes
               </Button>
             </form>
           </CardContent>
